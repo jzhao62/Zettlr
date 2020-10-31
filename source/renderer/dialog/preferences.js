@@ -20,6 +20,7 @@ const { ipcRenderer } = require('electron')
 const { trans } = require('../../common/lang/i18n')
 const generateId = require('../../common/util/generate-id')
 const renderTemplate = require('../util/render-template')
+const serializeFormData = require('../../common/util/serialize-form-data')
 
 class PreferencesDialog extends ZettlrDialog {
   constructor () {
@@ -108,11 +109,11 @@ class PreferencesDialog extends ZettlrDialog {
 
   postAct () {
     // Activate the form to be submitted
-    let form = this._modal.find('form#dialog')
-    form.on('submit', (e) => {
+    let form = this._modal.querySelector('form#dialog')
+    form.addEventListener('submit', (e) => {
       e.preventDefault()
       // Give the ZettlrBody object the results
-      this.proceed(form.serializeArray())
+      this.proceed(serializeFormData(form))
     })
 
     // Download not-available languages on select
@@ -281,7 +282,9 @@ class PreferencesDialog extends ZettlrDialog {
 
   proceed (data) {
     // First remove potential error-classes
-    this.getModal().find('input').removeClass('has-error')
+    for (const element of this.getModal().querySelectorAll('input')) {
+      element.classList.remove('has-error')
+    }
 
     let cfg = {}
 
@@ -296,6 +299,7 @@ class PreferencesDialog extends ZettlrDialog {
     cfg['debug'] = (data.find(elem => elem.name === 'debug') !== undefined)
     cfg['checkForBeta'] = (data.find(elem => elem.name === 'checkForBeta') !== undefined)
     cfg['enableRMarkdown'] = (data.find(elem => elem.name === 'enableRMarkdown') !== undefined)
+    cfg['window.nativeAppearance'] = (data.find(elem => elem.name === 'window.nativeAppearance') !== undefined)
     cfg['newFileDontPrompt'] = (data.find(elem => elem.name === 'newFileDontPrompt') !== undefined)
 
     // Display checkboxes

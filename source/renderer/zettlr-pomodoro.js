@@ -61,6 +61,15 @@ class ZettlrPomodoro {
     this._sound = new window.Audio()
     this._sound.volume = 1
     this._sound.src = require('./assets/glass.ogg')
+  } // END constructor
+
+  /**
+   * Returns the popup target
+   *
+   * @return  {Element}  The toolbar button
+   */
+  get popupTarget () {
+    return document.querySelector('.button.pomodoro')
   }
 
   /**
@@ -123,8 +132,11 @@ class ZettlrPomodoro {
 
       // Set the class of the value accordingly
       this._progressValue.addClass(this._phase.type)
-      document.getElementById('pomodoro-phase-type').textContent = trans('pomodoro.phase.' + this._phase.type)
-      if (this._pref) this._pref.change() // Indicate a possible change in the popup's size.
+      const pomodoroTimerPhaseElement = document.getElementById('pomodoro-phase-type')
+      if (pomodoroTimerPhaseElement) {
+        pomodoroTimerPhaseElement.textContent = trans('pomodoro.phase.' + this._phase.type)
+      }
+
       global.notify('Pomodoro: <strong>' + trans('pomodoro.phase.' + this._phase.type) + '</strong>')
     }
 
@@ -145,6 +157,11 @@ class ZettlrPomodoro {
 
     // Prepare next cycle
     this._phase.cur++
+
+    // Lastly, indicate a possible change in the popup's size.
+    if (this._pref !== null) {
+      this._pref.change()
+    }
 
     setTimeout(() => { this._progress() }, 1000)
   }
@@ -183,7 +200,7 @@ class ZettlrPomodoro {
         'volume': this._sound.volume * 100
       }
 
-      this._pref = global.popupProvider.show('pomodoro-settings', document.querySelector('.button.pomodoro'), data, (form) => {
+      this._pref = global.popupProvider.show('pomodoro-settings', this.popupTarget, data, (form) => {
         this._pref = null
         // User has aborted
         if (form === null) return
@@ -193,12 +210,11 @@ class ZettlrPomodoro {
         // 2 = long
         // 3 = volume
         this._duration.task = parseInt(form[0].value, 10) * 60
-        this._duration.short = parseInt(form[1].value) * 60
+        this._duration.short = parseInt(form[1].value, 10) * 60
         this._duration.long = parseInt(form[2].value, 10) * 60
         this._sound.volume = parseInt(form[3].value, 10) / 100
         // Now start
         this._start()
-        if (this._sound.volume === 0) console.log('Starting muted!')
       })
 
       const volumeDisplay = document.getElementById('pomodoro-volume-level')
@@ -228,7 +244,9 @@ class ZettlrPomodoro {
         'type': trans('pomodoro.phase.' + this._phase.type)
       }
 
-      this._pref = global.popupProvider.show('pomodoro-status', document.querySelector('.button.pomodoro'), data)
+      this._pref = global.popupProvider.show('pomodoro-status', this.popupTarget, data, (form) => {
+        this._pref = null
+      })
 
       $('#pomodoro-stop-button').on('click', (e) => {
         global.popupProvider.close()

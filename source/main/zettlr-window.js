@@ -19,7 +19,6 @@ const { dialog, BrowserWindow, app } = require('electron')
 const path = require('path')
 const { trans } = require('../common/lang/i18n')
 const isDir = require('../common/util/is-dir')
-const ZettlrMenu = require('./zettlr-menu.js')
 
 /**
  * This class is a wrapper for electron's BrowserWindow class with some functions
@@ -34,15 +33,6 @@ class ZettlrWindow {
   constructor (parent) {
     this._app = parent
     this._win = null
-    this._menu = null
-
-    // Enable classes from within the app to update the menu
-    global.refreshMenu = () => {
-      if (!this._win || !this._menu) {
-        return global.log.verbose('Not updating menu. Window not open.')
-      }
-      this._menu.set()
-    }
   }
 
   /**
@@ -60,6 +50,7 @@ class ZettlrWindow {
     let winX = global.config.get('window.x')
     let winY = global.config.get('window.y')
     let winMax = global.config.get('window.max')
+    const shouldUseNativeAppearance = global.config.get('window.nativeAppearance')
 
     // Sanity checks
     // NOTE: We cannot require the screen module on module load b/c when this
@@ -83,24 +74,31 @@ class ZettlrWindow {
       webPreferences: {
         // Zettlr needs all the node features, so in preparation for Electron
         // 5.0 we'll need to explicitly request it.
-        nodeIntegration: true
+        nodeIntegration: true,
+        enableRemoteModule: false
       },
       backgroundColor: '#fff',
       scrollBounce: true, // The nice scrolling effect for macOS
       defaultEncoding: 'utf8' // Why the hell does this default to ISO?
     }
 
-    // On macOS create a chromeless window with the window controls.
-    if (process.platform === 'darwin') {
+    // If the user wants to use native appearance, this means to use a frameless
+    // window with the traffic lights slightly inset.
+    if (process.platform === 'darwin' && shouldUseNativeAppearance) {
       winConf.titleBarStyle = 'hiddenInset'
+    } else if (process.platform === 'darwin' && !shouldUseNativeAppearance) {
+      // Now we're simply creating a frameless window without everything.
+      winConf.frame = false
     }
 
-    // Remove the frame on Windows
-    if (process.platform === 'win32') winConf.frame = false
+    // If the user wants to use non-native appearance on non-macOS platforms,
+    // this means we need a frameless window (so that the renderer instead can
+    // display the menu and window controls).
+    if (process.platform !== 'darwin' && !shouldUseNativeAppearance) {
+      winConf.frame = false
+    }
 
-    // On Linux we'll fall back to how the windows should look
-
-    // Application icon for Linux. Cannot be not embedded in the executable.
+    // Application icon for Linux. Cannot not be embedded in the executable.
     if (process.platform === 'linux') {
       winConf.icon = path.join(__dirname, 'assets/icons/128x128.png')
     }
@@ -184,10 +182,6 @@ class ZettlrWindow {
       }
     }
 
-    // Set the application menu
-    this._menu = new ZettlrMenu(this)
-    this._menu.set()
-
     // Push the window into the globals that the menu for instance can access it
     // to send commands.
     global.mainWindow = this._win
@@ -233,14 +227,6 @@ class ZettlrWindow {
   }
 
   /**
-   * Shows a popup application menu at the specified coordinates
-   * @param  {number} x The x-position of the menu
-   * @param  {number} y The y-position of the menu
-   * @return {void}   Does not return
-   */
-  popupMenu (x, y) { this._menu.popup(x, y) }
-
-  /**
     * Indicates that there are unsaved changes with a star in title and, on
     * macOS, also the indicator in the traffic lights.
     * @return {ZettlrWindow} This for chainability.
@@ -266,7 +252,7 @@ class ZettlrWindow {
 
   /**
     * Returns the current window instance (or null, if window is null)
-    * @return {Mixed} Either a BrowserWindow instance or null
+    * @return {BrowserWindow|null} Either a BrowserWindow instance or null
     */
   getWindow () { return this._win }
 
@@ -373,7 +359,7 @@ class ZettlrWindow {
 
   /**
     * Show the dialog for choosing a directory
-    * @return {Array}          An array containing all selected paths.
+    * @return {Electron.OpenDialogReturnValue} An array containing all selected paths.
     */
   async askDir () {
     let startDir = app.getPath('home')
@@ -432,6 +418,8 @@ class ZettlrWindow {
       global.config.set('dialogPaths.askFileDialog', ret.filePaths[0])
     }
 
+    if (ret.canceled) throw new Error('The askFile dialog was cancelled')
+
     return ret.filePaths
   }
 
@@ -461,7 +449,7 @@ class ZettlrWindow {
   /**
     * Ask to remove the given object (either ZettlrFile or ZettlrDirectory)
     * @param  {Mixed} obj Either ZettlrFile or ZettlrDirectory
-    * @return {Boolean}     True if user wishes to remove it, or false.
+    * @return {boolean}     True if user wishes to remove it, or false.
     */
   async confirmRemove (obj) {
     let ret = await dialog.showMessageBox(this._win, {
